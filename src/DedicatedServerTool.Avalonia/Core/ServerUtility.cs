@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DedicatedServerTool.Avalonia.Core;
@@ -93,20 +94,29 @@ internal static class ServerUtility
 
             do
             {
+
                 if (profile.ShouldUpdateBeforeStarting)
                 {
                     await UpdateServerAndModsAsync(profile);
                 }
 
-                var isRestarting = false;
-                using Process process = new() { StartInfo = startInfo };
-                process.Start();
+                using Process process = new Process { StartInfo = startInfo };
+                Thread modCheckTask = new Thread(async () => await CheckForOutOfDateProfileModsAsync(profile, process));
 
+
+                process.Start();
+                var isRestarting = false;
+
+                if (profile.ShouldAutoUpdateMods && profile.RestartIntervalHours.HasValue)
+                {
+                    modCheckTask.Start();
+                }
+ 
                 var tasks = new List<Task>
                 {
                     process.WaitForExitAsync()
                 };
-                if (profile.RestartIntervalHours > 0)
+                if (profile.RestartIntervalHours > 0 && !profile.ShouldAutoUpdateMods)
                 {
                     tasks.Add(Task.Delay(TimeSpan.FromHours(profile.RestartIntervalHours.Value)).ContinueWith(_ => isRestarting = true));
                 }
@@ -119,10 +129,22 @@ internal static class ServerUtility
 
                 await process.WaitForExitAsync();
 
+
+
+                if (profile.ShouldAutoUpdateMods && profile.RestartIntervalHours.HasValue && !CleanExitCodes.Contains(process.ExitCode))
+                {
+                    await UpdateServerAndModsAsync(profile);
+                }
+
                 if (!isRestarting && CleanExitCodes.Contains(process.ExitCode))
                 {
                     break;
                 }
+                else if (!profile.ShouldRestartOnCrash && !profile.ShouldAutoUpdateMods)
+                {
+                    break; // allow server to crash if should restart setting isn't enabled
+                }
+
             } while (profile.ShouldRestartOnCrash || profile.RestartIntervalHours.HasValue);
         }
         catch (MappingException exception)
@@ -137,6 +159,48 @@ internal static class ServerUtility
         {
             await portForwardManager.ClosePortsAsync();
         }
+
+    }
+
+    private static async Task CheckForOutOfDateProfileModsAsync(ServerProfile profile, Process process)
+    {
+        while (true)
+        {
+            Thread.Sleep((int)((1000 * 60 * 60) * profile.RestartIntervalHours));
+            process.Refresh();
+            try
+            {
+                if (!process.HasExited)
+                {
+                    var updateModsTask = Parallel.ForEachAsync(profile.GetInstalledWorkshopIds(), async (workshopId, cancellationToken) =>
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            return;
+                        }
+
+                        await SteamCmdUtility.DownloadOrUpdateModAsync(profile.InstallDirectory, workshopId);
+                    });
+
+                    await Task.WhenAll(updateModsTask);
+
+                    //bool hasOutOfDateMods = await PofileHasOutOfDateModsAsync(profile);
+
+                    if (true/*InstalledWorkshopModUtility.HasOutOfDateModsAsync(profile.InstallDirectory)*/)
+                    {
+                        process.Kill(); // TODO: this is not very nice, proper fix will likely include using system32 dll to send input for closing
+
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // the process has likely been manually stopped.
+                break;
+            }
+        }
+        // Perform checks for outdated mods
     }
 
     public static Task UpdateServerAndModsAsync(ServerProfile serverProfile)

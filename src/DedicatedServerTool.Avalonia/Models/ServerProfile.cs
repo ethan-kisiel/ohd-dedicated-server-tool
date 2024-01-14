@@ -233,6 +233,14 @@ public class ServerProfile : ObservableObject
         set => SetProperty(ref _shouldUseUpnpForPortForwarding, value);
     }
 
+    private bool _shouldAutoUpdateMods;
+    public bool ShouldAutoUpdateMods
+    {
+        get => _shouldAutoUpdateMods;
+        set => SetProperty(ref _shouldAutoUpdateMods, value);
+    }
+    
+    
     private double? _restartIntervalHours;
     public double? RestartIntervalHours
     {
@@ -305,6 +313,11 @@ public class ServerProfile : ObservableObject
         VoteKickPassRatio = 0.51f;
         VoteKickPollDurationSeconds = 60;
         VoteKickCooldownSeconds = 30;
+    }
+
+    public String HasRestartInterval
+    {
+        get => "True";//(_restartIntervalHours.HasValue && _restartIntervalHours > 0.00).ToString();
     }
 
     public IEnumerable<long> GetInstalledWorkshopIds()
