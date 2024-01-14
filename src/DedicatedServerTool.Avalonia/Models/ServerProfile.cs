@@ -315,7 +315,7 @@ public class ServerProfile : ObservableObject
         VoteKickCooldownSeconds = 30;
     }
 
-    public String HasRestartInterval
+    public string HasRestartInterval
     {
         get => "True";//(_restartIntervalHours.HasValue && _restartIntervalHours > 0.00).ToString();
     }
