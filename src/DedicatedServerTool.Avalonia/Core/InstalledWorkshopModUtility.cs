@@ -47,7 +47,7 @@ namespace DedicatedServerTool.Avalonia.Core
             return workshopIds;
         }
 
-        internal static async Task<bool> HasOutOfDateModsAsync(string serverInstallDirectory)
+        internal static bool HasOutOfDateModsAsync(string serverInstallDirectory)
         {
             try
             {

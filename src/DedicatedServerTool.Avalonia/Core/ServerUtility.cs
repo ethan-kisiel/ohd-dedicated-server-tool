@@ -93,20 +93,23 @@ internal static class ServerUtility
             }
 
             do
-            {   
+            {
+
+                if (profile.ShouldUpdateBeforeStarting)
+                {
+                    await UpdateServerAndModsAsync(profile);
+                }
+
                 using Process process = new Process { StartInfo = startInfo };
                 Thread modCheckTask = new Thread(async () => await CheckForOutOfDateProfileModsAsync(profile, process));
+
+
                 process.Start();
                 var isRestarting = false;
 
                 if (profile.ShouldAutoUpdateMods && profile.RestartIntervalHours.HasValue)
                 {
                     modCheckTask.Start();
-                }
-              
-                if (profile.ShouldUpdateBeforeStarting)
-                {
-                    await UpdateServerAndModsAsync(profile);
                 }
  
                 var tasks = new List<Task>
@@ -125,23 +128,14 @@ internal static class ServerUtility
                 }
 
                 await process.WaitForExitAsync();
-                
-                if (profile.ShouldAutoUpdateMods && profile.RestartIntervalHours.HasValue)
+
+
+
+                if (profile.ShouldAutoUpdateMods && profile.RestartIntervalHours.HasValue && !CleanExitCodes.Contains(process.ExitCode))
                 {
-
-                    var updateModsTask = Parallel.ForEachAsync(profile.GetInstalledWorkshopIds(), async (workshopId, cancellationToken) =>
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            return;
-                        }
-
-                        await SteamCmdUtility.DownloadOrUpdateModAsync(profile.InstallDirectory, workshopId);
-                    });
-
-                    await Task.WhenAll(updateModsTask);
+                    await UpdateServerAndModsAsync(profile);
                 }
-              
+
                 if (!isRestarting && CleanExitCodes.Contains(process.ExitCode))
                 {
                     break;
@@ -190,11 +184,11 @@ internal static class ServerUtility
 
                     await Task.WhenAll(updateModsTask);
 
-                    bool hasOutOfDateMods = await PofileHasOutOfDateModsAsync(profile);
+                    //bool hasOutOfDateMods = await PofileHasOutOfDateModsAsync(profile);
 
-                    if (hasOutOfDateMods)
+                    if (true/*InstalledWorkshopModUtility.HasOutOfDateModsAsync(profile.InstallDirectory)*/)
                     {
-                        process.Kill(); // TODO: this is not very nice
+                        process.Kill(); // TODO: this is not very nice, proper fix will likely include using system32 dll to send input for closing
 
                         break;
                     }
@@ -207,21 +201,6 @@ internal static class ServerUtility
             }
         }
         // Perform checks for outdated mods
-    }
-
-    private static async Task<bool> PofileHasOutOfDateModsAsync(ServerProfile profile)
-    {
-        try
-        {
-            //DateTime modLastUpdated = await InstalledWorkshopModUtility.ScrapeWorkshopItemLastUpdated(3127339017);
-            return await InstalledWorkshopModUtility.HasOutOfDateModsAsync(profile.InstallDirectory);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Something went wrong with update check");
-        }
-
-        return false;
     }
 
     public static Task UpdateServerAndModsAsync(ServerProfile serverProfile)
