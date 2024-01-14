@@ -237,8 +237,7 @@ internal static class ServerUtility
         });
         return Task.WhenAll(updateServerTask, updateModsTask);
     }
-
-    private static void WriteIniAndConfigFiles(ServerProfile profile)
+    public static void WriteIniAndConfigFiles(ServerProfile profile)
     {
         WriteGameIni(profile);
         WriteEngineIni(profile);
